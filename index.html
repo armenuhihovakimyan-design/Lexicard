@@ -32,7 +32,7 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 9
 </style>
 </head>
 <body>
-<header><div class="bar"><div class="brand">LexiCard German</div><div class="topright"><div id="pct">0%</div><button class="theme" id="themeBtn">◐</button></div></div></header>
+<header><div class="bar"><div class="brand">LexiCard German</div><div class="topright"><div style="display:flex;align-items:center;gap:10px"><div id="targetLabel" style="font-size:12px;color:var(--muted);font-weight:700"></div><div id="pct">0%</div><button class="theme" id="themeBtn">◐</button></div></div></div></header>
 <div class="wrap">
   <div class="row">
     <section class="card">
@@ -40,7 +40,7 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 9
       <p class="sub">German grammar info only. Every saved card keeps German on the front, even in reverse mode.</p>
       <div class="grid2">
         <select id="srcLang"><option value="de" selected>German</option></select>
-        <button class="swap" id="swapBtn" aria-label="Reverse card">⇄</button>
+        <button class="swap" id="swapBtn" aria-label="Reverse language">⇄</button>
         <select id="tgtLang"><option value="en" selected>English</option><option value="ru">Russian</option><option value="hy">Armenian</option></select>
       </div>
       <div class="search"><input id="wordInput" placeholder="Type a German word…"><button class="btn" id="lookupBtn">Look up</button></div>
@@ -60,7 +60,7 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 9
     <aside class="card">
       <h2 class="title" style="font-size:24px">Learning score</h2>
       <div class="barWrap"><div class="fill" id="fill"></div></div>
-      <p class="sub">Rate cards Again, Good, or Easy. The deck stays local to this browser.</p>
+      <p class="sub">Rate cards Again, Good, or Easy. The deck stays local to this browser. The reverse button switches the translation language, while the German word stays the card subject.</p>
       <div class="actions"><button class="btn secondary" id="studyBtn">Study mode</button><button class="btn secondary" id="exportBtn">Export</button><label class="btn secondary" for="importFile" style="display:inline-flex;align-items:center;justify-content:center">Import</label><input id="importFile" type="file" accept="application/json" hidden><button class="btn secondary" id="clearBtn">Clear</button></div>
     </aside>
   </div>
@@ -74,8 +74,8 @@ let cards=JSON.parse(localStorage.getItem(K)||'[]'),preview=null,idx=0;
 const $=s=>document.querySelector(s),deck=$('#deck');
 const L={en:'English',ru:'Russian',hy:'Armenian'};
 function save(){localStorage.setItem(K,JSON.stringify(cards))}
-function pct(){return cards.length?Math.round(cards.reduce((a,c)=>a+(c.score||0),0)/(cards.length*2)*100):0}
-function sync(){const p=pct();$('#pct').textContent=p+'%';$('#fill').style.width=p+'%'}
+function pct(){return cards.length?Math.round(cards.reduce((a,c)=>a+(c.score||0),0)/(cards.length*2)*100):0} function updateTarget(){document.getElementById('targetLabel').textContent='→ '+label(document.getElementById('tgtLang').value)}
+function sync(){const p=pct();$('#pct').textContent=p+'%';$('#fill').style.width=p+'%';updateTarget()}
 function badge(s){return s>=2?'Learned':s===1?'Learning':'New'}
 function cls(s){return s>=2?'s2':s===1?'s1':'s0'}
 async function translate(word,tl){const u=`https://translate.googleapis.com/translate_a/single?client=gtx&sl=de&tl=${tl}&dt=t&q=${encodeURIComponent(word)}`;const r=await fetch(u);const d=await r.json();return d[0].map(x=>x[0]).join('')}
@@ -86,8 +86,8 @@ async function grammar(word){try{const u='https://r.jina.ai/http://www.duden.de/
 :]*[: ]+([^
 ]+)/i);if(p) plural=p[1].trim();if(word.toLowerCase()==='hund'){article='der';plural='Hunde';gender='masculine';pos='Substantiv'}return{article,plural,gender,pos}}catch(e){if(word.toLowerCase()==='hund')return{article:'der',plural:'Hunde',gender:'masculine',pos:'Substantiv'};return{article:'',plural:'',gender:'',pos:''}}}
 $('#themeBtn').onclick=()=>document.documentElement.setAttribute('data-theme',document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
-$('#swapBtn').onclick=()=>{$('#tgtLang').value=$('#tgtLang').value==='en'?'ru':($('#tgtLang').value==='ru'?'hy':'en');};
-$('#lookupBtn').onclick=lookup;$('#wordInput').addEventListener('keydown',e=>e.key==='Enter'&&lookup());
+$('#swapBtn').onclick=()=>{const t=$('#tgtLang').value;$('#tgtLang').value=t==='en'?'ru':(t==='ru'?'hy':'en');$('#lookupBtn').click();};
+$('#lookupBtn').onclick=lookup;$('#wordInput').addEventListener('keydown',e=>e.key==='Enter'&&lookup());$('#tgtLang').addEventListener('change',updateTarget);
 async function lookup(){const word=$('#wordInput').value.trim();if(!word)return;$('#lookupBtn').textContent='Looking up…';try{const tl=$('#tgtLang').value;const translation=await translate(word,tl);const g=await grammar(word);preview={id:Date.now(),word,translation,sourceLang:'de',targetLang:tl,score:0,reviewCount:0,lastReviewed:null,...g};$('#pw').textContent=preview.word;$('#pt').textContent=preview.translation;$('#m1').textContent=preview.pos||'—';$('#m2').textContent=preview.gender||'—';$('#m3').textContent=preview.plural||'—';$('#m4').textContent=preview.article||'—';$('#chips').innerHTML=`<span class="chip">German → ${L[tl]}</span><span class="chip">${preview.pos||'word'}</span><span class="chip">${preview.gender||'gender unknown'}</span>`;$('#preview').classList.add('show')}catch(e){alert('Lookup failed')}$('#lookupBtn').textContent='Look up'}
 $('#saveBtn').onclick=()=>{if(!preview)return;cards.unshift(preview);save();render();preview=null;$('#preview').classList.remove('show');$('#wordInput').value=''}
 function render(){sync();if(!cards.length){deck.innerHTML='<div class="card">No saved cards yet.</div>';return}deck.innerHTML=cards.map((c,i)=>`<div class="flash" data-i="${i}"><div class="inner"><div class="face"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="mini">${c.pos||'Substantiv'}</div><div class="big">${c.article?c.article+' ':''}${c.word}</div></div><div class="scoreBadge ${cls(c.score||0)}">${badge(c.score||0)}</div></div><div style="margin-top:10px"><span class="chip">${c.gender||'—'}</span><span class="chip">plural: ${c.plural||'—'}</span></div><div class="actions"><button class="small rate" data-v="0">Again</button><button class="small rate" data-v="1">Good</button><button class="small rate" data-v="2">Easy</button><button class="small del">Delete</button></div></div><div class="face back"><div class="mini">${L[c.targetLang]}</div><div class="big">${c.translation}</div><div class="sub">${c.gender||''} ${c.plural?('· plural: '+c.plural):''}</div></div></div></div>`).join('');deck.querySelectorAll('.flash').forEach(el=>el.addEventListener('click',e=>{if(e.target.closest('button'))return;el.classList.toggle('flipped')}));deck.querySelectorAll('.del').forEach(b=>b.onclick=e=>{e.stopPropagation();cards.splice(+b.closest('.flash').dataset.i,1);save();render()});deck.querySelectorAll('.rate').forEach(b=>b.onclick=e=>{e.stopPropagation();const i=+b.closest('.flash').dataset.i;cards[i].score=+b.dataset.v;cards[i].reviewCount=(cards[i].reviewCount||0)+1;cards[i].lastReviewed=new Date().toISOString();save();render()})}
