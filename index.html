@@ -82,7 +82,36 @@ function badgeLbl(s){return s>=2?'Learned':s===1?'Learning':'New'}
 document.querySelectorAll('.lang-pill').forEach(function(pill){pill.addEventListener('click',function(){document.querySelectorAll('.lang-pill').forEach(function(p){p.classList.remove('active')});pill.classList.add('active');currentLang=pill.dataset.lang;var word=document.getElementById('wordInput').value.trim();if(word&&document.getElementById('resultBox').classList.contains('show'))doLookup()})})
 document.querySelectorAll('.tab').forEach(function(tab){tab.addEventListener('click',function(){document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});document.querySelectorAll('.tab-pane').forEach(function(p){p.classList.remove('active')});tab.classList.add('active');document.getElementById('pane-'+tab.dataset.tab).classList.add('active')})})
 function translate(word,tl){var url='https://translate.googleapis.com/translate_a/single?client=gtx&sl=de&tl='+tl+'&dt=t&q='+encodeURIComponent(word);return fetch(url).then(function(r){if(!r.ok)throw new Error();return r.json()}).then(function(d){return d[0].map(function(s){return s[0]}).join('')})}
-function getGrammar(word,pos){var g={pos:'',article:'',gender:'',plural:'',source:'notfound'};if(!pos)return Promise.resolve(g);var lookup=word;if(pos==='verb')lookup=word; if(pos==='adjective')lookup=word; if(pos==='noun')lookup=word; var url='https://r.jina.ai/https://www.duden.de/suchen/dudenonline/'+encodeURIComponent(lookup); return fetch(url,{headers:{'Accept':'text/plain'}}).then(function(r){return r.ok?r.text():''}).then(function(text){if(!text)return g;var t=text.toLowerCase();var want={noun:/substantiv/i,verb:/\bverb\b/i,adjective:/adjektiv/i}[pos];if(!want.test(text)){return g}g.source='duden';if(pos==='noun'){g.pos='Substantiv';if(/maskulin/i.test(text))g.gender='masculine';else if(/feminin/i.test(text))g.gender='feminine';else if(/neutrum/i.test(text))g.gender='neutral';var am=text.match(/(der|die|das)\s+\S+/i);if(am)g.article=am[1].toLowerCase();var pm=text.match(/Plural[^:\n]*:\s*([^\n]+)/i)||text.match(/Mehrzahl[^:\n]*:\s*([^\n]+)/i);if(pm)g.plural=pm[1].trim().split(/[\s,]+/)[0];return g}if(pos==='verb'){g.pos='Verb';return g}if(pos==='adjective'){g.pos='Adjektiv';return g}return g}).catch(function(){return g})}
+
+async function getGrammar(word, pos) {
+  var g = {pos:'', article:'', gender:'', plural:'', source:'notfound'};
+  if (!pos) return g;
+  if (pos !== 'noun') {
+    if (pos === 'verb') g.pos = 'Verb';
+    else if (pos === 'adjective') g.pos = 'Adjektiv';
+    return g;
+  }
+  try {
+    const s = await fetch('https://r.jina.ai/https://www.duden.de/suchen/dudenonline/' + encodeURIComponent(word));
+    if (!s.ok) return g;
+    const text = await s.text();
+    const m = text.match(/## \[\*\*([^*]+?)\*\*\]\((https:\/\/www\.duden\.de\/rechtschreibung\/[^)]+)\)/i);
+    if (!m) return g;
+    const l = await fetch('https://r.jina.ai/' + m[2]);
+    if (!l.ok) return g;
+    const b = await l.text();
+    g.source = 'duden';
+    const head = b.match(/#\s+(.+?),\s*(der|die|das)\b/i);
+    if (head) { g.pos = 'Substantiv'; g.article = head[2].toLowerCase(); }
+    const w = b.match(/Wortart:[^\n]*Substantiv,\s*(maskulin|feminin|neutrum)/i);
+    if (w) { const gg = w[1].toLowerCase(); g.gender = gg==='maskulin'?'masculine':gg==='feminin'?'feminine':'neutral'; }
+    const p = b.match(/Plural:[^\n]*/i);
+    if (p) { const pm = p[0].match(/Plural:\s*(?:der|die|das)?\s*([A-Za-zÄÖÜäöüß\-]+(?:en|e|er|n)?)/i); if (pm) g.plural = pm[1]; }
+    if (!g.article && g.gender) { const m = {masculine:'der',feminine:'die',neutral:'das'}; g.article = m[g.gender] || ''; }
+    return g;
+  } catch (e) { return g; }
+}
+
 function renderGrammarTags(g,el){var tags=[];if(g.pos)tags.push('<span class="g-tag"><b>'+esc(g.pos)+'</b></span>');if(g.article)tags.push('<span class="g-tag">'+esc(g.article)+'</span>');if(g.gender)tags.push('<span class="g-tag">'+esc(g.gender)+'</span>');if(g.plural)tags.push('<span class="g-tag">pl: <b>'+esc(g.plural)+'</b></span>');el.innerHTML=tags.join('')}
 function setPropActive(pos){document.querySelectorAll('.prop-btn').forEach(function(b){b.classList.toggle('active',b.dataset.pos===pos)})}
 function propBoxHTML(pos,g){var title=pos==='noun'?'noun properties':pos==='verb'?'verb properties':'adjective properties';var val='not found';if(g&&g.pos){if(pos==='noun'&&g.pos==='Substantiv'){val=['article: '+(g.article||'not found'),'gender: '+(g.gender||'not found'),'plural: '+(g.plural||'not found')].join('<br>')}else if(pos==='verb'&&g.pos==='Verb'){val='found'}else if(pos==='adjective'&&g.pos==='Adjektiv'){val='found'}}return '<div class="prop-box"><div class="lbl">'+title+'</div><div class="val">'+val+'</div></div>'}
